@@ -150,3 +150,78 @@ res <- list(
 )
 
 ```
+
+```{r}
+# 4) VISUALIZATIONS
+suppressPackageStartupMessages({
+  library(ggplot2); library(forcats); library(wordcloud); library(purrr)
+})
+
+dir.create("figs", showWarnings = FALSE)
+
+plot_bars <- function(df, title_txt) {
+  df |>
+    mutate(word = forcats::fct_reorder(word, n)) |>
+    ggplot(aes(word, n)) +
+    geom_col() +
+    coord_flip() +
+    labs(x = NULL, y = "Frequency", title = title_txt) +
+    theme_minimal(base_size = 12)
+}
+
+purrr::walk(res, ~{
+  nm <- .x$name
+  g <- plot_bars(.x$top, paste0("Emma — Frequent Positive/Joy Words (", nm, ")"))
+  ggsave(filename = file.path("figs", paste0(gsub("[^A-Za-z]+","_", tolower(nm)), "_bar.png")),
+         plot = g, width = 9, height = 6, dpi = 120)
+
+  png(file.path("figs", paste0(gsub("[^A-Za-z]+","_", tolower(nm)), "_cloud.png")),
+      width = 900, height = 600, res = 120)
+  suppressWarnings(wordcloud(words = .x$raw$word, freq = .x$raw$n, max.words = 150))
+  title(main = paste0("Word Cloud — ", nm), line = -1)
+  dev.off()
+})
+
+```
+
+```{r}
+# 5) CONSOLE SUMMARIES (tables only)
+suppressPackageStartupMessages({ library(tibble); library(tidyr) })
+
+# metrics per lexicon
+summary_metrics <- purrr::map_dfr(res, \(x) {
+  tibble(
+    lexicon       = x$name,
+    total_matches = sum(x$raw$n),
+    unique_words  = nrow(x$raw)
+  )
+})
+print(summary_metrics)
+
+# Top-N words per lexicon (stacked table)
+top_n <- 15
+top_table <- purrr::map_dfr(res, \(x) {
+  x$raw |> dplyr::slice_max(n, n = top_n) |> dplyr::mutate(lexicon = x$name)
+}) |>
+  dplyr::relocate(lexicon) |>
+  dplyr::arrange(lexicon, dplyr::desc(n))
+print(top_table)
+
+# Words shared across all three lexicons, with per-lexicon counts
+shared_words <- purrr::reduce(purrr::map(res, \(x) dplyr::distinct(x$raw, word)),
+                              dplyr::inner_join, by = "word")
+
+shared_counts <- shared_words |>
+  dplyr::left_join(res[[1]]$raw |> dplyr::rename(n_1 = n), by = "word") |>
+  dplyr::left_join(res[[2]]$raw |> dplyr::rename(n_2 = n), by = "word") |>
+  dplyr::left_join(res[[3]]$raw |> dplyr::rename(n_3 = n), by = "word") |>
+  dplyr::mutate(total = dplyr::coalesce(n_1,0) + dplyr::coalesce(n_2,0) + dplyr::coalesce(n_3,0)) |>
+  dplyr::arrange(dplyr::desc(total)) |>
+  dplyr::rename(
+    !!res[[1]]$name := n_1,
+    !!res[[2]]$name := n_2,
+    !!res[[3]]$name := n_3
+  )
+print(shared_counts)
+
+```
