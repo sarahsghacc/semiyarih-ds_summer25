@@ -88,7 +88,7 @@ Good Luck!
 suppressPackageStartupMessages({
   library(dplyr); 
   library(tidyr); 
-  git add emma_sentiment_min.Rlibrary(stringr)
+  library(stringr)
   library(janeaustenr)
 })
 
@@ -103,5 +103,50 @@ emma <- austen_books() |>
     chapter = cumsum(str_detect(text, regex("^chapter\\s+[\\divxlc]+", ignore_case = TRUE))) + 1L
   ) |>
   ungroup()
+
+```
+
+```{r}
+# TOKENIZATION
+suppressPackageStartupMessages({
+  library(tidytext)
+})
+
+data(stop_words)
+emma_tokens <- emma |>
+  tidytext::unnest_tokens(word, text) |>
+  anti_join(stop_words, by = "word") |>
+  filter(!stringr::str_detect(word, "^[0-9]+$"))
+```
+
+```{r}
+# 3) SENTIMENT LEXICONS
+suppressPackageStartupMessages(library(syuzhet))
+vocab <- unique(emma_tokens$word)
+
+nrc_mat  <- syuzhet::get_nrc_sentiment(vocab)
+nrc_joy  <- tibble::tibble(word = vocab) |>
+  dplyr::bind_cols(tibble::as_tibble(nrc_mat)) |>
+  dplyr::filter(joy == 1L) |>
+  dplyr::select(word)
+
+afinn_pos <- tibble::tibble(word = vocab, val = syuzhet::get_sentiment(vocab, method = "afinn")) |>
+  dplyr::filter(val > 0) |>
+  dplyr::select(word)
+
+bing_pos  <- tibble::tibble(word = vocab, val = syuzhet::get_sentiment(vocab, method = "bing")) |>
+  dplyr::filter(val > 0) |>
+  dplyr::select(word)
+
+analyze <- function(tokens, lex_df, name, min_n = 50) {
+  raw <- tokens |> inner_join(lex_df, by = "word") |> count(word, sort = TRUE)
+  list(name = name, raw = raw, top = raw |> filter(n > min_n))
+}
+
+res <- list(
+  analyze(emma_tokens, nrc_joy,  "NRC (joy)"),
+  analyze(emma_tokens, afinn_pos,"AFINN (positive)"),
+  analyze(emma_tokens, bing_pos, "BING (positive)")
+)
 
 ```
