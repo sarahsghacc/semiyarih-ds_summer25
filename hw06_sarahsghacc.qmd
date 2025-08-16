@@ -225,3 +225,36 @@ shared_counts <- shared_words |>
 print(shared_counts)
 
 ```
+
+```{r}
+# Helpers
+plot_bars <- function(df, title_txt) {
+  df |>
+    dplyr::mutate(word = forcats::fct_reorder(word, n)) |>
+    ggplot2::ggplot(ggplot2::aes(word, n)) +
+    ggplot2::geom_col() +
+    ggplot2::coord_flip() +
+    ggplot2::labs(x = NULL, y = "Frequency", title = title_txt) +
+    ggplot2::theme_minimal(base_size = 12)
+}
+
+# Try n > 50 first; if empty, relax to n >= 25; if still empty, plot top 20.
+choose_plot_df <- function(x) {
+  df50 <- dplyr::filter(x$raw, n > 50)
+  if (nrow(df50) > 0) return(list(df = df50, note = "filtered: n > 50"))
+  df25 <- dplyr::filter(x$raw, n >= 25)
+  if (nrow(df25) > 0) return(list(df = df25, note = "filtered: n >= 25"))
+  list(df = dplyr::slice_max(x$raw, n, n = 20), note = "top 20 by frequency")
+}
+
+# ---- Bar charts ----
+bars_info <- purrr::map(res, choose_plot_df)
+for (i in seq_along(res)) {
+  nm   <- res[[i]]$name
+  info <- bars_info[[i]]
+  print(
+    plot_bars(info$df, paste0("Emma — Frequent Words (", nm, ", ", info$note, ")"))
+  )
+}
+
+```
